@@ -41,9 +41,18 @@ class CalculationRequest
     {
         $response = $this->runRequest();
         $smallestPossibleBin = collect($response['response']['bins_packed'])
+            ->filter(function ($bin) {
+                return !count($bin['not_packed_items']);
+            })
             ->pluck('bin_data')
             ->sortByDesc('used_space') // = Effectiveness of bin. Higher is better.
             ->first();
+
+        // There is no suitable bin for all items.
+        if (!$smallestPossibleBin)
+            return json_encode([
+                'error' => 'No suitable bin found for this request.'
+            ]);
 
         return json_encode([
             'bin_id' => $smallestPossibleBin['id'],
@@ -74,8 +83,14 @@ class CalculationRequest
         curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
         curl_setopt( $ch, CURLOPT_RETURNTRANSFER, 1 );
         $resp = curl_exec($ch);
-        if (curl_errno($ch))
-            Log::error( 'Error #' . curl_errno($ch) . ': ' . curl_error($ch));
+        if (curl_errno($ch)) {
+            Log::error('Error #' . curl_errno($ch) . ': ' . curl_error($ch));
+            return [
+                'response' => [
+                    'bins_packed' => []
+                ]
+            ];
+        }
 
         curl_close($ch);
 
